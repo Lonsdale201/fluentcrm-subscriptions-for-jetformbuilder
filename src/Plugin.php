@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FluentSubsForJetFormBuilder;
 
+use FluentSubsForJetFormBuilder\Actions\FluentCrmAddListTagsAction;
 use FluentSubsForJetFormBuilder\Actions\FluentCrmSubscribeAction;
 use FluentSubsForJetFormBuilder\Services\FluentCrmData;
 use Jet_Form_Builder\Actions\Manager;
@@ -16,17 +17,19 @@ use YahnisElsts\PluginUpdateChecker\v5p0\PucFactory;
 
 final class Plugin {
 
-	public const VERSION = '1.1';
 	public const MINIMUM_FLUENTCRM_VERSION = '2.8.0';
 
 	private static ?self $instance = null;
 
 	private string $plugin_file;
 
+	private string $version;
+
 	private FluentCrmData $data_service;
 
 	private function __construct( string $plugin_file ) {
 		$this->plugin_file  = $plugin_file;
+		$this->version      = get_file_data( $plugin_file, array( 'Version' => 'Version' ) )['Version'] ?? '0.0';
 		$this->data_service = new FluentCrmData();
 
 		add_action( 'init', array( $this, 'load_textdomain' ) );
@@ -73,15 +76,18 @@ final class Plugin {
 		$manager->register_action_type(
 			new FluentCrmSubscribeAction( $this->data_service )
 		);
+		$manager->register_action_type(
+			new FluentCrmAddListTagsAction( $this->data_service )
+		);
 	}
 
 	public function enqueue_editor_assets(): void {
 		$asset_rel_path = 'assets/js/editor-action.js';
 		$asset_path     = $this->asset_path( $asset_rel_path );
-		$version        = file_exists( $asset_path ) ? (string) filemtime( $asset_path ) : self::VERSION;
+		$version        = file_exists( $asset_path ) ? (string) filemtime( $asset_path ) : $this->version;
 		$style_rel_path = 'assets/js/editor-action.css';
 		$style_path     = $this->asset_path( $style_rel_path );
-		$style_version  = file_exists( $style_path ) ? (string) filemtime( $style_path ) : self::VERSION;
+		$style_version  = file_exists( $style_path ) ? (string) filemtime( $style_path ) : $this->version;
 
 		wp_register_script(
 			'fluent-subs-jetformbuilder-action',
@@ -119,7 +125,7 @@ final class Plugin {
 	}
 
 	public function version(): string {
-		return self::VERSION;
+		return $this->version;
 	}
 
 	public function maybe_adjust_response_message( $form_handler, bool $is_success ): void {

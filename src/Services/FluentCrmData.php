@@ -47,6 +47,43 @@ final class FluentCrmData {
 	}
 
 	/**
+	 * @return array<int, array<string, string>>
+	 */
+	public function get_statuses(): array {
+		if ( ! $this->is_available() || ! function_exists( 'fluentcrm_subscriber_editable_statuses' ) ) {
+			return array();
+		}
+
+		try {
+			$statuses = fluentcrm_subscriber_editable_statuses( true );
+		} catch ( \Throwable $throwable ) {
+			return array();
+		}
+
+		$options = array();
+
+		foreach ( $statuses as $status ) {
+			$id    = (string) ( $status['id'] ?? $status['slug'] ?? '' );
+			$title = (string) ( $status['title'] ?? '' );
+
+			if ( '' === $id ) {
+				continue;
+			}
+
+			if ( '' === $title ) {
+				$title = ucfirst( $id );
+			}
+
+			$options[] = array(
+				'value' => $id,
+				'label' => $title,
+			);
+		}
+
+		return $options;
+	}
+
+	/**
 	 * @param iterable<int, object|array> $items
 	 * @param string                      $fallback_key
 	 *
