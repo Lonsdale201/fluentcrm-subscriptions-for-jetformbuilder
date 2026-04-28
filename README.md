@@ -1,7 +1,7 @@
 # FluentCRM Subscriptions for JetFormBuilder
 This add-on adds new action types to JetFormBuilder, allowing you to create subscription forms and manage contacts for FluentCRM.
 
-Stable tag: 1.2
+Stable tag: 1.3
 
 This is an add-on for the **JetFormBuilder** and **FluentCRM** plugins.
 
