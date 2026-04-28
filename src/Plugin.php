@@ -4,8 +4,15 @@ declare(strict_types=1);
 
 namespace FluentSubsForJetFormBuilder;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 use FluentSubsForJetFormBuilder\Actions\FluentCrmAddListTagsAction;
 use FluentSubsForJetFormBuilder\Actions\FluentCrmSubscribeAction;
+use FluentSubsForJetFormBuilder\Events\AlreadySubscribedEvent;
+use FluentSubsForJetFormBuilder\Events\ContactCreatedEvent;
+use FluentSubsForJetFormBuilder\Events\ContactUpdatedEvent;
 use FluentSubsForJetFormBuilder\Services\FluentCrmData;
 use Jet_Form_Builder\Actions\Manager;
 use Jet_Form_Builder\Form_Messages\Manager as Messages_Manager;
@@ -52,6 +59,7 @@ final class Plugin {
 		$this->init_updater();
 
 		add_action( 'jet-form-builder/actions/register', array( $this, 'register_action' ) );
+		add_filter( 'jet-form-builder/event-types', array( $this, 'register_event_types' ) );
 		add_action( 'jet-form-builder/editor-assets/before', array( $this, 'enqueue_editor_assets' ) );
 		add_action( 'jet-form-builder/form-handler/after-send', array( $this, 'maybe_adjust_response_message' ), 10, 2 );
 	}
@@ -81,6 +89,25 @@ final class Plugin {
 		);
 	}
 
+	/**
+	 * Register custom JFB action events fired by the Subscribe action.
+	 *
+	 * Other actions on the form (typically FluentCrmAddListTagsAction)
+	 * can be wired to these events via the action editor's events
+	 * picker, so they only run on the matching outcome.
+	 *
+	 * @param array<int, object> $events
+	 *
+	 * @return array<int, object>
+	 */
+	public function register_event_types( array $events ): array {
+		$events[] = new ContactCreatedEvent();
+		$events[] = new ContactUpdatedEvent();
+		$events[] = new AlreadySubscribedEvent();
+
+		return $events;
+	}
+
 	public function enqueue_editor_assets(): void {
 		$asset_rel_path = 'assets/js/editor-action.js';
 		$asset_path     = $this->asset_path( $asset_rel_path );
@@ -88,11 +115,18 @@ final class Plugin {
 		$style_rel_path = 'assets/js/editor-action.css';
 		$style_path     = $this->asset_path( $style_rel_path );
 		$style_version  = file_exists( $style_path ) ? (string) filemtime( $style_path ) : $this->version;
+		$dependencies   = array( 'jet-fb-components', 'wp-element', 'wp-components', 'wp-i18n' );
+
+		foreach ( array( 'jet-fb-actions-v2', 'jet-fb-blocks-v2-to-actions-v2' ) as $handle ) {
+			if ( wp_script_is( $handle, 'registered' ) ) {
+				$dependencies[] = $handle;
+			}
+		}
 
 		wp_register_script(
 			'fluent-subs-jetformbuilder-action',
 			$this->asset_url( $asset_rel_path ),
-			array( 'jet-fb-components', 'wp-element', 'wp-components', 'wp-i18n' ),
+			$dependencies,
 			$version,
 			true
 		);

@@ -4,6 +4,13 @@ declare(strict_types=1);
 
 namespace FluentSubsForJetFormBuilder\Actions;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+use FluentSubsForJetFormBuilder\Events\AlreadySubscribedEvent;
+use FluentSubsForJetFormBuilder\Events\ContactCreatedEvent;
+use FluentSubsForJetFormBuilder\Events\ContactUpdatedEvent;
 use FluentSubsForJetFormBuilder\Services\FluentCrmData;
 use Jet_Form_Builder\Actions\Action_Handler;
 use Jet_Form_Builder\Actions\Types\Base;
@@ -37,6 +44,22 @@ final class FluentCrmSubscribeAction extends Base {
 
 	public function self_script_name() {
 		return 'JetFluentCrmSubscribe';
+	}
+
+	/**
+	 * Prevent the Subscribe action from being wired to the events it
+	 * dispatches itself — that would create infinite recursion if an
+	 * admin accidentally selected one of the FLUENTCRM.* events.
+	 */
+	public function unsupported_events(): array {
+		return array(
+			ContactCreatedEvent::class,
+			ContactUpdatedEvent::class,
+			AlreadySubscribedEvent::class,
+			'FLUENTCRM.CONTACT_CREATED',
+			'FLUENTCRM.CONTACT_UPDATED',
+			'FLUENTCRM.ALREADY_SUBSCRIBED',
+		);
 	}
 
 	public function editor_labels() {
@@ -197,6 +220,14 @@ final class FluentCrmSubscribeAction extends Base {
 
 			if ( $existing && isset( $existing->status ) && 'subscribed' === $existing->status ) {
 				if ( $add_only ) {
+					$this->dispatch_outcome_event(
+						$handler,
+						AlreadySubscribedEvent::class,
+						'already_subscribed',
+						$email,
+						$existing
+					);
+
 					$message = trim( (string) ( $this->settings['already_subscribed_message'] ?? '' ) );
 
 					if ( '' === $message ) {
@@ -217,6 +248,24 @@ final class FluentCrmSubscribeAction extends Base {
 			if ( ! $contact ) {
 				throw new Action_Exception(
 					__( 'Unable to create or update the FluentCRM contact.', 'fluent-subs-for-jetformbuilder' )
+				);
+			}
+
+			if ( $existing ) {
+				$this->dispatch_outcome_event(
+					$handler,
+					ContactUpdatedEvent::class,
+					'contact_updated',
+					$email,
+					$contact
+				);
+			} else {
+				$this->dispatch_outcome_event(
+					$handler,
+					ContactCreatedEvent::class,
+					'contact_created',
+					$email,
+					$contact
 				);
 			}
 
@@ -346,5 +395,58 @@ final class FluentCrmSubscribeAction extends Base {
 				'fluentcrm_success_message' => $message,
 			)
 		);
+	}
+
+	/**
+	 * Stash outcome data into the action context (so listening actions
+	 * can read it via $handler->get_context( 'fluentcrm_subscribe', ... )),
+	 * then synchronously dispatch the matching JFB event.
+	 *
+	 * The dispatch is wrapped in try/catch because event executors may
+	 * fire user-defined actions that throw; we don't want those to mask
+	 * the Subscribe action's own outcome (the user's CRM record IS
+	 * created — a downstream tag failure shouldn't reverse that).
+	 *
+	 * @param Action_Handler                $handler
+	 * @param class-string                  $event_class
+	 * @param string                        $outcome   one of 'contact_created', 'contact_updated', 'already_subscribed'
+	 * @param string                        $email
+	 * @param object|null                   $contact   FluentCRM contact object, when available
+	 */
+	private function dispatch_outcome_event(
+		Action_Handler $handler,
+		string $event_class,
+		string $outcome,
+		string $email,
+		$contact = null
+	): void {
+		$handler->add_context_once(
+			$this->get_id(),
+			array(
+				'fluentcrm_outcome'    => $outcome,
+				'fluentcrm_email'      => $email,
+				'fluentcrm_contact_id' => is_object( $contact ) && isset( $contact->id ) ? (int) $contact->id : 0,
+			)
+		);
+
+		if ( ! function_exists( 'jet_fb_events' ) ) {
+			return;
+		}
+
+		try {
+			jet_fb_events()->execute( $event_class );
+		} catch ( \Throwable $throwable ) {
+			// Listener actions misbehaving must not roll back the CRM write.
+			// Surface to PHP error log only.
+			if ( function_exists( 'error_log' ) ) {
+				error_log(
+					sprintf(
+						'[fluent-subs-for-jetformbuilder] Event %s listener threw: %s',
+						$event_class,
+						$throwable->getMessage()
+					)
+				);
+			}
+		}
 	}
 }

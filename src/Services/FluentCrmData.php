@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace FluentSubsForJetFormBuilder\Services;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 use function __;
 
 final class FluentCrmData {

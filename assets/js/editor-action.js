@@ -1,9 +1,17 @@
 ( function registerFluentCrmAction( wp, JetFBActions, actionData, jfb ) {
-	if ( ! wp || ! JetFBActions || ! JetFBActions.addAction ) {
+	if ( ! wp ) {
 		return;
 	}
 
-	const { addAction } = JetFBActions;
+	const hasLegacyAction = JetFBActions && typeof JetFBActions.addAction === 'function';
+	const hasModernAction =
+		jfb?.actions && typeof jfb.actions.registerAction === 'function';
+
+	if ( ! hasLegacyAction && ! hasModernAction ) {
+		return;
+	}
+
+	const addAction = hasLegacyAction ? JetFBActions.addAction.bind( JetFBActions ) : () => {};
 	const { Fragment, createElement } = wp.element;
 	const {
 		SelectControl,
@@ -84,6 +92,39 @@
 		}
 
 		return Boolean( value );
+	};
+
+	const toPlainObject = ( value ) => {
+		if ( value && typeof value === 'object' && ! Array.isArray( value ) ) {
+			return value;
+		}
+
+		if ( typeof value === 'string' && value.trim() ) {
+			try {
+				const parsed = JSON.parse( value );
+
+				if ( parsed && typeof parsed === 'object' && ! Array.isArray( parsed ) ) {
+					return parsed;
+				}
+			} catch ( e ) {
+				// Ignore legacy malformed editor values and use defaults below.
+			}
+		}
+
+		return {};
+	};
+
+	const registerAction = ( type, component, config ) => {
+		if ( hasModernAction ) {
+			jfb.actions.registerAction( {
+				type,
+				edit: component,
+				...config,
+			} );
+			return;
+		}
+
+		addAction( type, component, config );
 	};
 
 	const getLabelValue = ( labelFn, key, fallback ) => {
@@ -390,20 +431,21 @@ const tokenFieldProps = {
 		);
 	};
 
-addAction(
-	'fluentcrm_subscribe',
-	function FluentCrmSubscribe( props ) {
+	registerAction(
+		'fluentcrm_subscribe',
+		function FluentCrmSubscribe( props ) {
 		const { settings, label, onChangeSetting } = props;
 
 		const selectedLists = uniqueStrings( ensureArrayOfStrings( settings.list_id ) );
 		const selectedTags = uniqueStrings( ensureArrayOfStrings( settings.tag_id ) );
 		const bypassOptIn = toBoolean( settings.bypass_double_optin );
-		const fieldsMap = {
-			email: '',
-			first_name: '',
-			last_name: '',
-			...( settings.fields_map || {} ),
-		};
+			const fieldsMap = {
+				email: '',
+				first_name: '',
+				last_name: '',
+				phone: '',
+				...toPlainObject( settings.fields_map ),
+			};
 		const addOnly = toBoolean( settings.add_only );
 		const alreadySubscribedMessage = settings.already_subscribed_message || '';
 		const existingContactMessage = settings.existing_contact_message || '';
@@ -493,36 +535,42 @@ addAction(
 					),
 			} )
 	);
-	},
-	{
-		category: 'communication',
-		docHref: 'https://github.com/Lonsdale201/fluentcrm-subscriptions-for-jetformbuilder',
-	}
-);
-
-	if ( wp?.data?.dispatch ) {
-		try {
-			wp.data.dispatch( 'jet-forms/actions' ).registerAction( {
-				type: 'fluentcrm_subscribe',
-				label: __( 'FluentCRM Subscribe', 'fluent-subs-for-jetformbuilder' ),
-				category: 'communication',
-				docHref: 'https://github.com/Lonsdale201/fluentcrm-subscriptions-for-jetformbuilder',
-			} );
-		} catch ( err ) {
-			// Do nothing if Jet Form Builder store is not ready yet.
+		},
+		{
+			label: __( 'FluentCRM Subscribe', 'fluent-subs-for-jetformbuilder' ),
+			category: 'communication',
+			docHref: 'https://github.com/Lonsdale201/fluentcrm-subscriptions-for-jetformbuilder',
+		// Advertise the custom events this action dispatches at runtime so
+		// other actions on the same form can pick them up in the Events
+		// match selector. Without this, the events registered on the PHP
+		// side via 'jet-form-builder/event-types' are present in the global
+		// store but invisible in the per-action event picker.
+		provideEvents: () => [
+			'FLUENTCRM.CONTACT_CREATED',
+			'FLUENTCRM.CONTACT_UPDATED',
+			'FLUENTCRM.ALREADY_SUBSCRIBED',
+		],
 		}
-	}
+	);
 }( window.wp || false, window.JetFBActions || false, window.JetFluentCrmSubscribe || {}, window.jfb || {} ));
 
 /* ================================================================
  * FluentCRM Add List & Tags – JetFormBuilder action editor
  * ================================================================ */
 ( function registerFluentCrmAddListTagsAction( wp, JetFBActions, actionData, jfb ) {
-	if ( ! wp || ! JetFBActions || ! JetFBActions.addAction ) {
+	if ( ! wp ) {
 		return;
 	}
 
-	const { addAction } = JetFBActions;
+	const hasLegacyAction = JetFBActions && typeof JetFBActions.addAction === 'function';
+	const hasModernAction =
+		jfb?.actions && typeof jfb.actions.registerAction === 'function';
+
+	if ( ! hasLegacyAction && ! hasModernAction ) {
+		return;
+	}
+
+	const addAction = hasLegacyAction ? JetFBActions.addAction.bind( JetFBActions ) : () => {};
 	const { Fragment, createElement } = wp.element;
 	const {
 		SelectControl,
@@ -597,6 +645,39 @@ addAction(
 			return value === '1' || value.toLowerCase() === 'true';
 		}
 		return Boolean( value );
+	};
+
+	const toPlainObject = ( value ) => {
+		if ( value && typeof value === 'object' && ! Array.isArray( value ) ) {
+			return value;
+		}
+
+		if ( typeof value === 'string' && value.trim() ) {
+			try {
+				const parsed = JSON.parse( value );
+
+				if ( parsed && typeof parsed === 'object' && ! Array.isArray( parsed ) ) {
+					return parsed;
+				}
+			} catch ( e ) {
+				// Ignore legacy malformed editor values and use defaults below.
+			}
+		}
+
+		return {};
+	};
+
+	const registerAction = ( type, component, config ) => {
+		if ( hasModernAction ) {
+			jfb.actions.registerAction( {
+				type,
+				edit: component,
+				...config,
+			} );
+			return;
+		}
+
+		addAction( type, component, config );
 	};
 
 	const getLabelValue = ( labelFn, key, fallback ) => {
@@ -801,9 +882,9 @@ addAction(
 		);
 	};
 
-	addAction(
-		'fluentcrm_add_list_tags',
-		function FluentCrmAddListTags( props ) {
+		registerAction(
+			'fluentcrm_add_list_tags',
+			function FluentCrmAddListTags( props ) {
 			const { settings, label, onChangeSetting } = props;
 
 			const selectedLists = uniqueStrings( ensureArrayOfStrings( settings.list_id ) );
@@ -811,13 +892,13 @@ addAction(
 			const useCurrentUser = toBoolean( settings.use_current_user );
 			const skipNonExisting = toBoolean( settings.skip_non_existing );
 			const newContactStatus = settings.new_contact_status || 'subscribed';
-			const fieldsMap = {
-				email: '',
-				first_name: '',
-				last_name: '',
-				phone: '',
-				...( settings.fields_map || {} ),
-			};
+				const fieldsMap = {
+					email: '',
+					first_name: '',
+					last_name: '',
+					phone: '',
+					...toPlainObject( settings.fields_map ),
+				};
 
 			const listSuggestions = tokenSuggestionsFromOptions( listOptions );
 			const tagSuggestions = tokenSuggestionsFromOptions( tagOptions );
@@ -945,25 +1026,12 @@ addAction(
 						),
 					} )
 			);
-		},
-		{
-			category: 'communication',
-			docHref:
-				'https://github.com/Lonsdale201/fluentcrm-subscriptions-for-jetformbuilder',
-		}
-	);
-
-	if ( wp?.data?.dispatch ) {
-		try {
-			wp.data.dispatch( 'jet-forms/actions' ).registerAction( {
-				type: 'fluentcrm_add_list_tags',
+			},
+			{
 				label: __( 'FluentCRM Add List & Tags', 'fluent-subs-for-jetformbuilder' ),
 				category: 'communication',
 				docHref:
 					'https://github.com/Lonsdale201/fluentcrm-subscriptions-for-jetformbuilder',
-			} );
-		} catch ( err ) {
-			// Store may not be ready yet.
-		}
-	}
+			}
+		);
 }( window.wp || false, window.JetFBActions || false, window.JetFluentCrmAddListTags || {}, window.jfb || {} ) );

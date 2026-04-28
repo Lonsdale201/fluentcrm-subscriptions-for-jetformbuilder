@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace FluentSubsForJetFormBuilder\Actions;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 use FluentSubsForJetFormBuilder\Services\FluentCrmData;
 use Jet_Form_Builder\Actions\Action_Handler;
 use Jet_Form_Builder\Actions\Types\Base;
